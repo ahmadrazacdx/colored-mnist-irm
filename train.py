@@ -100,7 +100,6 @@ if __name__ == '__main__':
     print(f'{args.mode.upper()} | device={args.device} steps={args.steps} lr={args.lr}')
     if args.mode == 'irm':
         print(f'penalty_weight={args.penalty_weight} anneal_steps={args.anneal_steps}')
-    print(f'Running over {len(SEEDS)} seeds: {SEEDS}')
     print('-' * 60)
 
     import numpy as np
@@ -120,12 +119,13 @@ if __name__ == '__main__':
         print(f'Seed {seed} | env1 {accs[0]:.1%} | env2 {accs[1]:.1%} | test {accs[2]:.1%}')
         torch.save(model.state_dict(), f'{args.mode}_model_seed{seed}.pt')
 
+    # Compute and report statistics
     all_accs = np.array(all_accs)
     means = all_accs.mean(axis=0)
     stds = all_accs.std(axis=0)
 
     print('-' * 60)
     print(f'Final (3 seeds) | '
-          f'env1 {means[0]:.1%} ± {stds[0]:.1%} | '
-          f'env2 {means[1]:.1%} ± {stds[1]:.1%} | '
-          f'test {means[2]:.1%} ± {stds[2]:.1%}')
+          f'env1: {means[0]:.1%} ({stds[0]:.1%}) | '
+          f'env2: {means[1]:.1%} ({stds[1]:.1%}) | '
+          f'test: {means[2]:.1%} ({stds[2]:.1%})')

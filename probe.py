@@ -41,7 +41,7 @@ def generate_accuracy_plot(erm_means, erm_stds, irm_means, irm_stds):
     x = np.arange(len(envs))
     width = 0.35
 
-    fig, ax = plt.subplots(figsize=(8, 5))
+    fig, ax = plt.subplots(figsize=(9, 6))
     eb_kwargs = dict(ecolor='black', capsize=4, alpha=0.7)
 
     rects1 = ax.bar(x - width/2, erm_means, width, yerr=erm_stds, label='ERM', color='#e74c3c', error_kw=eb_kwargs)
@@ -85,7 +85,7 @@ def generate_probe_plot(probe_means, probe_stds):
     irm_errs = [probe_stds['irm_color'], probe_stds['irm_digit']]
     eb_kwargs = dict(ecolor='black', capsize=4, alpha=0.7)
 
-    fig, ax = plt.subplots(figsize=(8, 5))
+    fig, ax = plt.subplots(figsize=(9, 6))
     rects1 = ax.bar(x - width/2, erm_scores, width, yerr=erm_errs, label='ERM Representation', color='#e74c3c', error_kw=eb_kwargs)
     rects2 = ax.bar(x + width/2, irm_scores, width, yerr=irm_errs, label='IRM Representation', color='#2ecc71', error_kw=eb_kwargs)
 
@@ -127,8 +127,6 @@ if __name__ == '__main__':
     all_erm_digit_probes = []
     all_irm_color_probes = []
     all_irm_digit_probes = []
-
-    print(f"Evaluating {len(SEEDS)} seeds: {SEEDS}...")
     
     for seed in SEEDS:
         set_seeds(seed)
@@ -185,10 +183,11 @@ if __name__ == '__main__':
     irm_color_mean, irm_color_std = np.mean(all_irm_color_probes), np.std(all_irm_color_probes)
     irm_digit_mean, irm_digit_std = np.mean(all_irm_digit_probes), np.std(all_irm_digit_probes)
 
+    print("\n" + "="*70)
     print(f"{'PROBE TARGET':<25} | {'ERM FEATURES':<18} | {'IRM FEATURES':<18}")
     print("-"*70)
-    print(f"{'Color (Spurious)':<25} | {erm_color_mean:.1%} ± {erm_color_std:.1%}     | {irm_color_mean:.1%} ± {irm_color_std:.1%}")
-    print(f"{'Digit Label (Causal)':<25} | {erm_digit_mean:.1%} ± {erm_digit_std:.1%}     | {irm_digit_mean:.1%} ± {irm_digit_std:.1%}")
+    print(f"{'Color (Spurious)':<25} | {erm_color_mean:.1%} ({erm_color_std:.1%})     | {irm_color_mean:.1%} ({irm_color_std:.1%})")
+    print(f"{'Digit Label (Causal)':<25} | {erm_digit_mean:.1%} ({erm_digit_std:.1%})     | {irm_digit_mean:.1%} ({irm_digit_std:.1%})")
     print("="*70)
 
     generate_accuracy_plot(erm_means, erm_stds, irm_means, irm_stds)
