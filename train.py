@@ -21,7 +21,8 @@ def irm_penalty(logits, labels):
 
 
 # ERM
-def train_erm(envs, args):
+def train_erm(envs, args, verbose=False):
+    """Empirical Risk Minimization"""
     model = MLP().to(args.device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
@@ -36,7 +37,7 @@ def train_erm(envs, args):
         loss.backward()
         optimizer.step()
 
-        if step % 100 == 0 or step == 1:
+        if verbose and (step % 100 == 0 or step == 1):
             accs = [accuracy(model, e['images'], e['labels']) for e in envs]
             print(f'  step {step:4d}  |  '
                   f'env1 {accs[0]:.1%}  env2 {accs[1]:.1%}  '
@@ -46,10 +47,10 @@ def train_erm(envs, args):
 
 
 # IRM
-
 L2_REG = 1e-3
 
-def train_irm(envs, args):
+def train_irm(envs, args, verbose=False):
+    """Invariant Risk Minimization with IRM-v1 penalty"""
     model = MLP().to(args.device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
@@ -74,7 +75,7 @@ def train_irm(envs, args):
         loss.backward()
         optimizer.step()
 
-        if step % 100 == 0 or step == 1:
+        if verbose and (step % 100 == 0 or step == 1):
             accs = [accuracy(model, e['images'], e['labels']) for e in envs]
             print(f'  step {step:4d}  |  '
                   f'env1 {accs[0]:.1%}  env2 {accs[1]:.1%}  '
@@ -88,7 +89,6 @@ if __name__ == '__main__':
     parser.add_argument('--mode', choices=['erm', 'irm'], required=True)
     parser.add_argument('--steps', type=int, default=500)
     parser.add_argument('--lr', type=float, default=1e-3)
-    parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--penalty_weight', type=float, default=1e4,
                         help='IRM penalty weight (lambda)')
     parser.add_argument('--anneal_steps', type=int, default=190,
@@ -96,23 +96,36 @@ if __name__ == '__main__':
     args = parser.parse_args()
     args.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    set_seeds(args.seed)
-    envs = make_envs(seed=args.seed)
-    for env in envs:
-        for key in env:
-            env[key] = env[key].to(args.device)
-
-    print(f'{args.mode.upper()} | device={args.device} '
-          f'steps={args.steps} lr={args.lr} seed={args.seed}')
+    SEEDS = [0, 1, 2]
+    print(f'{args.mode.upper()} | device={args.device} steps={args.steps} lr={args.lr}')
     if args.mode == 'irm':
-        print(f'  penalty_weight={args.penalty_weight} '
-              f'anneal_steps={args.anneal_steps} l2_reg={L2_REG}')
+        print(f'penalty_weight={args.penalty_weight} anneal_steps={args.anneal_steps}')
+    print(f'Running over {len(SEEDS)} seeds: {SEEDS}')
+    print('-' * 60)
 
-    train_fn = train_erm if args.mode == 'erm' else train_irm
-    model = train_fn(envs, args)
-    accs = [accuracy(model, e['images'], e['labels']) for e in envs]
-    print(f'Final  |  env1 {accs[0]:.1%}  env2 {accs[1]:.1%}  test {accs[2]:.1%}')
+    import numpy as np
+    all_accs = []
+    for i, seed in enumerate(SEEDS):
+        set_seeds(seed)
+        envs = make_envs(seed=seed)
+        for env in envs:
+            for key in env:
+                env[key] = env[key].to(args.device)
 
-    path = f'{args.mode}_model.pt'
-    torch.save(model.state_dict(), path)
-    print(f'Saved {path}')
+        train_fn = train_erm if args.mode == 'erm' else train_irm
+        model = train_fn(envs, args, verbose=(i == 0))
+        
+        accs = [accuracy(model, e['images'], e['labels']) for e in envs]
+        all_accs.append(accs)
+        print(f'Seed {seed} | env1 {accs[0]:.1%} | env2 {accs[1]:.1%} | test {accs[2]:.1%}')
+        torch.save(model.state_dict(), f'{args.mode}_model_seed{seed}.pt')
+
+    all_accs = np.array(all_accs)
+    means = all_accs.mean(axis=0)
+    stds = all_accs.std(axis=0)
+
+    print('-' * 60)
+    print(f'Final (3 seeds) | '
+          f'env1 {means[0]:.1%} ± {stds[0]:.1%} | '
+          f'env2 {means[1]:.1%} ± {stds[1]:.1%} | '
+          f'test {means[2]:.1%} ± {stds[2]:.1%}')
