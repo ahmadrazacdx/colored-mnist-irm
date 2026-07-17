@@ -147,7 +147,7 @@ We extract the $390$-dimensional features from the penultimate layer of both tra
   **Figure 4:** Representation probing results for ERM and IRM features.
 </div>
 
-Both representations retain perfect color information, a linear probe decodes color at $100\%$ from both ERM and IRM features. This is expected and worth discussing: IRM-v1 is a **predictor alignment** method, not an information bottleneck. It makes the classifier head ignore color, but it doesn't force the representation to erase it. The color information is still present in the $390$-dimensional space, it's just orthogonal to the prediction direction. A method like DANN (domain-adversarial training) would actively try to remove color from the representation, which is a fundamentally different approach.
+Both representations retain perfect color information, a linear probe decodes color at $100\%$ from both ERM and IRM features. This is expected and worth discussing: IRM-v1 is a **predictor alignment** method, not an information bottleneck. It makes the classifier head ignore color, but it doesn't force the representation to erase it. A method like DANN (domain-adversarial training) would actively try to remove color from the representation, which is a fundamentally different approach.
 
 The digit probe confirms that IRM's representation retains causal shape information ($74.3\%$), closely matching its actual test accuracy. ERM's digit probe is higher ($85.6\%$) because its representation encodes everything aggressively, both color and shape, but it uses the wrong one at test time.
 

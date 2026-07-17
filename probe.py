@@ -138,7 +138,7 @@ def plot_dynamics(erm_hist, irm_hist, anneal_step=190):
 
     ax.axhline(0.50, color='gray', ls='--', lw=0.7, alpha=0.4)
     ax.axhline(0.75, color='gray', ls=':', lw=0.7, alpha=0.4)
-    ax.text(515, 0.505, 'chance', fontsize=8, alpha=0.5, va='bottom')
+    ax.text(515, 0.505, '50%', fontsize=8, alpha=0.5, va='bottom')
     ax.text(515, 0.755, '75%', fontsize=8, alpha=0.5, va='bottom')
 
     ax.set_xlabel('Training step')
