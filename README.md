@@ -153,16 +153,18 @@ The digit probe confirms that IRM's representation retains causal shape informat
 
 ### 5.4 Representation Geometry
 
-To directly visualize whether color and digit are encoded along the same or different directions, we project the test-environment features onto the learned **probe weight vectors** — the digit probe direction ($\hat{w}_{digit}$) and the color probe direction ($\hat{w}_{color}$). We also report the cosine similarity between these two directions: $\cos\theta = \hat{w}_{color} \cdot \hat{w}_{digit}$.
+The probing results show both representations encode color perfectly — so why does ERM fail and IRM succeed? The answer lies in the **classifier head**, not the representation. Both models have 390-dimensional feature spaces with color and digit encoded along orthogonal directions. The difference is which direction the head points.
+
+We measure this by computing $|\cos(\hat{w}_{head},\, \hat{w}_{color})|$ and $|\cos(\hat{w}_{head},\, \hat{w}_{digit})|$, where $\hat{w}_{head}$ is the head's weight vector and $\hat{w}_{color}$, $\hat{w}_{digit}$ are the probe directions.
 
 <div align="center">
 
-  <img src="./figures/pca_representations.png" alt="Representation Geometry" width="600" />
+  <img src="./figures/pca_representations.png" alt="Representation Geometry" width="450" />
 
-  **Figure 5:** Projection onto probe weight directions. **Top row (ERM):** both colorings show separation along the diagonal ($\cos\theta \approx 1$), confirming color and digit are aligned. **Bottom row (IRM):** digit separates horizontally and color vertically ($\cos\theta \approx 0$), confirming the two features are orthogonal in the representation.
+  **Figure 5:** Classifier head alignment. We compute the cosine similarity between the model's head weight vector and the linear probe directions for color and digit. ERM's head aligns strongly with the color direction, while IRM's head aligns strictly with the digit direction.
 </div>
 
-In ERM's representation, the digit and color probe directions point in nearly the same direction ($\cos\theta \approx 1$), so points cluster along the diagonal regardless of how we color them. This is the geometric signature of spurious reliance: ERM treats color *as* the digit feature. In IRM's representation, the two directions are nearly orthogonal ($\cos\theta \approx 0$), so digit labels separate along the x-axis while colors separate along the y-axis. The model retained color information in its $390$-dimensional space (explaining the $100\%$ color probe) but organized it perpendicular to the prediction direction, making it invisible to the linear head.
+ERM's head aligns with the color probe direction — it classifies by color. IRM's head aligns with the digit probe direction — it classifies by shape. The representation geometry is similar in both models (both encode color and digit along separate directions), but IRM's penalty rotated the head away from the spurious feature and toward the causal one. This is precisely what "predictor alignment" means: IRM doesn't erase color from the representation, it makes the classifier ignore it.
 
 ## 6. Discussion
 
