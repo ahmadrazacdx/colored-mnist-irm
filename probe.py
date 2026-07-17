@@ -4,7 +4,6 @@ import os
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
-from sklearn.decomposition import PCA
 from sklearn.linear_model import LogisticRegression
 
 from data import set_seeds, make_envs
@@ -156,42 +155,45 @@ def plot_dynamics(erm_hist, irm_hist, anneal_step=190):
 
 
 def plot_pca(erm_model, irm_model, envs, device):
-    test_imgs = envs[2]['images'].to(device)
-    test_labels = envs[2]['labels'].cpu().numpy().ravel()
-    test_colors = envs[2]['colors'].cpu().numpy().ravel()
-
-    with torch.no_grad():
-        erm_feats = erm_model.features(test_imgs).cpu().numpy()
-        irm_feats = irm_model.features(test_imgs).cpu().numpy()
-
-    erm_pca = PCA(n_components=2).fit_transform(erm_feats)
-    irm_pca = PCA(n_components=2).fit_transform(irm_feats)
-
+    """Project features onto probe weight vectors to show orthogonality."""
     fig, axes = plt.subplots(2, 2, figsize=(8, 7))
-    n = min(2000, len(test_labels))
-    idx = np.random.permutation(len(test_labels))[:n]
+    n_viz = 2000
 
-    for row, (pca, name) in enumerate([(erm_pca, 'ERM'), (irm_pca, 'IRM')]):
-        for val, c, lab in [(0, IRM_COLOR, 'digit 0\u20134'), (1, ERM_COLOR, 'digit 5\u20139')]:
-            m = test_labels[idx] == val
-            axes[row, 0].scatter(pca[idx[m], 0], pca[idx[m], 1],
-                                 c=c, s=4, alpha=0.35, label=lab, edgecolors='none')
-        axes[row, 0].set_title(f'{name} \u2014 colored by digit label')
-        axes[row, 0].legend(markerscale=3, fontsize=9, loc='best', framealpha=0.9)
+    for row, (model, name) in enumerate([(erm_model, 'ERM'), (irm_model, 'IRM')]):
+        feats, labels, colors = extract_features(model, envs, device)
+        w_c = LogisticRegression(max_iter=1000, C=1.0).fit(feats, colors).coef_[0]
+        w_d = LogisticRegression(max_iter=1000, C=1.0).fit(feats, labels).coef_[0]
+        w_c, w_d = w_c / np.linalg.norm(w_c), w_d / np.linalg.norm(w_d)
+        cos = np.dot(w_c, w_d)
+        t_feats, t_lab, t_col = extract_features(model, [envs[2]], device)
+        pd, pc = t_feats @ w_d, t_feats @ w_c
+        idx = np.random.permutation(len(t_lab))[:n_viz]
 
-        for val, c, lab in [(0, '#d62728', 'red'), (1, '#2ca02c', 'green')]:
-            m = test_colors[idx] == val
-            axes[row, 1].scatter(pca[idx[m], 0], pca[idx[m], 1],
-                                 c=c, s=4, alpha=0.35, label=lab, edgecolors='none')
-        axes[row, 1].set_title(f'{name} \u2014 colored by input color')
-        axes[row, 1].legend(markerscale=3, fontsize=9, loc='best', framealpha=0.9)
+        for v, c, lab in [(0, IRM_COLOR, 'digit 0\u20134'), (1, ERM_COLOR, 'digit 5\u20139')]:
+            m = t_lab[idx] == v
+            axes[row, 0].scatter(pd[idx[m]], pc[idx[m]], c=c, s=4, alpha=0.35,
+                                 label=lab, edgecolors='none')
+        axes[row, 0].set_title(f'{name} \u2014 colored by digit')
+        axes[row, 0].legend(markerscale=3, fontsize=9, framealpha=0.9)
 
-    for ax in axes.flat:
-        ax.set_xlabel('PC1', fontsize=10)
-        ax.set_ylabel('PC2', fontsize=10)
-        ax.tick_params(labelsize=0, length=0)
+        for v, c, lab in [(0, '#d62728', 'red'), (1, '#2ca02c', 'green')]:
+            m = t_col[idx] == v
+            axes[row, 1].scatter(pd[idx[m]], pc[idx[m]], c=c, s=4, alpha=0.35,
+                                 label=lab, edgecolors='none')
+        axes[row, 1].set_title(f'{name} \u2014 colored by color')
+        axes[row, 1].legend(markerscale=3, fontsize=9, framealpha=0.9)
 
-    fig.suptitle('Representation structure', fontsize=13, y=1.01)
+        for col in range(2):
+            axes[row, col].set_xlabel('\u2192 digit probe direction', fontsize=9)
+            axes[row, col].set_ylabel('\u2192 color probe direction', fontsize=9)
+            axes[row, col].tick_params(labelsize=0, length=0)
+            axes[row, col].text(0.03, 0.97, f'cos \u03b8 = {cos:.2f}',
+                                transform=axes[row, col].transAxes, fontsize=10,
+                                va='top', fontweight='bold',
+                                bbox=dict(boxstyle='round,pad=0.3',
+                                          facecolor='white', alpha=0.8))
+
+    fig.suptitle('Representation Geometry (test env)', fontsize=13, y=1.01)
     plt.tight_layout()
     plt.savefig('figures/pca_representations.png', dpi=150, bbox_inches='tight')
     plt.close()

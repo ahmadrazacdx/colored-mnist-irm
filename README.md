@@ -153,16 +153,16 @@ The digit probe confirms that IRM's representation retains causal shape informat
 
 ### 5.4 Representation Geometry
 
-To directly visualize the claim that color is orthogonal to the prediction direction in IRM, we project the $390$-dimensional features onto their first two principal components and color the same points by digit label (left column) vs. input color (right column).
+To directly visualize whether color and digit are encoded along the same or different directions, we project the test-environment features onto the learned **probe weight vectors** — the digit probe direction ($\hat{w}_{digit}$) and the color probe direction ($\hat{w}_{color}$). We also report the cosine similarity between these two directions: $\cos\theta = \hat{w}_{color} \cdot \hat{w}_{digit}$.
 
 <div align="center">
 
-  <img src="./figures/pca_representations.png" alt="PCA Representations" width="600" />
+  <img src="./figures/pca_representations.png" alt="Representation Geometry" width="600" />
 
-  **Figure 5:** PCA of test-environment representations. **Top row (ERM):** digit and color clusters align on the same axis, confirming ERM uses color as a proxy for digit. **Bottom row (IRM):** digit and color separate along different principal components, the representation encodes both features but along orthogonal directions.
+  **Figure 5:** Projection onto probe weight directions. **Top row (ERM):** both colorings show separation along the diagonal ($\cos\theta \approx 1$), confirming color and digit are aligned. **Bottom row (IRM):** digit separates horizontally and color vertically ($\cos\theta \approx 0$), confirming the two features are orthogonal in the representation.
 </div>
 
-In ERM's representation, the digit-label clusters and color clusters fall along the same principal component. This makes sense: ERM learned color *as* the digit feature, so the two are interchangeable in the representation. In IRM's representation, digit labels separate cleanly along PC1, but color separates along a different axis. The two features are geometrically orthogonal — the model retained color in its representation (explaining the $100\%$ color probe) but organized it so the linear head can ignore it entirely.
+In ERM's representation, the digit and color probe directions point in nearly the same direction ($\cos\theta \approx 1$), so points cluster along the diagonal regardless of how we color them. This is the geometric signature of spurious reliance: ERM treats color *as* the digit feature. In IRM's representation, the two directions are nearly orthogonal ($\cos\theta \approx 0$), so digit labels separate along the x-axis while colors separate along the y-axis. The model retained color information in its $390$-dimensional space (explaining the $100\%$ color probe) but organized it perpendicular to the prediction direction, making it invisible to the linear head.
 
 ## 6. Discussion
 
