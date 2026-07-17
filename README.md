@@ -151,11 +151,24 @@ Both representations retain perfect color information, a linear probe decodes co
 
 The digit probe confirms that IRM's representation retains causal shape information ($74.3\%$), closely matching its actual test accuracy. ERM's digit probe is higher ($85.6\%$) because its representation encodes everything aggressively, both color and shape, but it uses the wrong one at test time.
 
+### 5.4 Representation Geometry
+
+To directly visualize the claim that color is orthogonal to the prediction direction in IRM, we project the $390$-dimensional features onto their first two principal components and color the same points by digit label (left column) vs. input color (right column).
+
+<div align="center">
+
+  <img src="./figures/pca_representations.png" alt="PCA Representations" width="600" />
+
+  **Figure 5:** PCA of test-environment representations. **Top row (ERM):** digit and color clusters align on the same axis, confirming ERM uses color as a proxy for digit. **Bottom row (IRM):** digit and color separate along different principal components, the representation encodes both features but along orthogonal directions.
+</div>
+
+In ERM's representation, the digit-label clusters and color clusters fall along the same principal component. This makes sense: ERM learned color *as* the digit feature, so the two are interchangeable in the representation. In IRM's representation, digit labels separate cleanly along PC1, but color separates along a different axis. The two features are geometrically orthogonal — the model retained color in its representation (explaining the $100\%$ color probe) but organized it so the linear head can ignore it entirely.
+
 ## 6. Discussion
 
 - **IRM Stability:** IRM-v1 was remarkably stable here (test std = $0.1\%$). This is not always the case. [Gulrajani & Lopez-Paz (2021)](https://arxiv.org/abs/2007.01434) showed that IRM can be highly sensitive to hyperparameters on more complex benchmarks like DomainBed. The stability we observe is partly due to the simplicity of Colored MNIST.
 - **Gap from Shape Ceiling:** IRM reaches $\sim 66.2\%$ vs the theoretical $75\%$ ceiling. This gap comes from the interaction between $25\%$ label noise and IRM's optimization dynamics. Longer training, learning rate tuning, or stronger penalty weights could close it.
-- **The $100\%$ Color Probe:** IRM's representation perfectly encodes color while ignoring it for prediction. This tells us that IRM-v1 operates at the level of the classifier, not the representation. Whether this is desirable depends on the use case, as in safety-critical settings, we might want the representation itself to be scrubbed of spurious features (which would require a different method).
+- **The $100\%$ Color Probe:** IRM's representation perfectly encodes color while ignoring it for prediction. The PCA visualization (Figure 5) confirms this mechanistically: color is not erased, it is rotated orthogonal to the prediction axis. Methods like DANN that enforce a domain-adversarial loss would actively erase color from the representation, which is a fundamentally different approach.
 
 ## 7. References
 

@@ -4,6 +4,7 @@ import os
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA
 from sklearn.linear_model import LogisticRegression
 
 from data import set_seeds, make_envs
@@ -138,7 +139,7 @@ def plot_dynamics(erm_hist, irm_hist, anneal_step=190):
 
     ax.axhline(0.50, color='gray', ls='--', lw=0.7, alpha=0.4)
     ax.axhline(0.75, color='gray', ls=':', lw=0.7, alpha=0.4)
-    ax.text(515, 0.505, 'chance', fontsize=8, alpha=0.5, va='bottom')
+    ax.text(515, 0.505, '50%', fontsize=8, alpha=0.5, va='bottom')
     ax.text(515, 0.755, '75%', fontsize=8, alpha=0.5, va='bottom')
 
     ax.set_xlabel('Training step')
@@ -152,6 +153,50 @@ def plot_dynamics(erm_hist, irm_hist, anneal_step=190):
     plt.savefig('figures/training_dynamics.png', dpi=150, bbox_inches='tight')
     plt.close()
     print('Saved figures/training_dynamics.png')
+
+
+def plot_pca(erm_model, irm_model, envs, device):
+    test_imgs = envs[2]['images'].to(device)
+    test_labels = envs[2]['labels'].cpu().numpy().ravel()
+    test_colors = envs[2]['colors'].cpu().numpy().ravel()
+
+    with torch.no_grad():
+        erm_feats = erm_model.features(test_imgs).cpu().numpy()
+        irm_feats = irm_model.features(test_imgs).cpu().numpy()
+
+    erm_pca = PCA(n_components=2).fit_transform(erm_feats)
+    irm_pca = PCA(n_components=2).fit_transform(irm_feats)
+
+    fig, axes = plt.subplots(2, 2, figsize=(8, 7))
+    n = min(2000, len(test_labels))
+    idx = np.random.permutation(len(test_labels))[:n]
+
+    for row, (pca, name) in enumerate([(erm_pca, 'ERM'), (irm_pca, 'IRM')]):
+        for val, c, lab in [(0, IRM_COLOR, 'digit 0\u20134'), (1, ERM_COLOR, 'digit 5\u20139')]:
+            m = test_labels[idx] == val
+            axes[row, 0].scatter(pca[idx[m], 0], pca[idx[m], 1],
+                                 c=c, s=4, alpha=0.35, label=lab, edgecolors='none')
+        axes[row, 0].set_title(f'{name} \u2014 colored by digit label')
+        axes[row, 0].legend(markerscale=3, fontsize=9, loc='best', framealpha=0.9)
+
+        for val, c, lab in [(0, '#d62728', 'red'), (1, '#2ca02c', 'green')]:
+            m = test_colors[idx] == val
+            axes[row, 1].scatter(pca[idx[m], 0], pca[idx[m], 1],
+                                 c=c, s=4, alpha=0.35, label=lab, edgecolors='none')
+        axes[row, 1].set_title(f'{name} \u2014 colored by input color')
+        axes[row, 1].legend(markerscale=3, fontsize=9, loc='best', framealpha=0.9)
+
+    for ax in axes.flat:
+        ax.set_xlabel('PC1', fontsize=10)
+        ax.set_ylabel('PC2', fontsize=10)
+        ax.tick_params(labelsize=0, length=0)
+
+    fig.suptitle('Representation structure', fontsize=13, y=1.01)
+    plt.tight_layout()
+    plt.savefig('figures/pca_representations.png', dpi=150, bbox_inches='tight')
+    plt.close()
+    print('Saved figures/pca_representations.png')
+
 
 if __name__ == '__main__':
     os.makedirs('figures', exist_ok=True)
@@ -211,3 +256,9 @@ if __name__ == '__main__':
     else:
         print('Skipping dynamics plot (re-run train.py to generate history files)')
 
+    set_seeds(0)
+    envs_0 = make_envs(seed=0)
+    erm_0, irm_0 = MLP().to(device), MLP().to(device)
+    erm_0.load_state_dict(torch.load('erm_model_seed0.pt', map_location=device))
+    irm_0.load_state_dict(torch.load('irm_model_seed0.pt', map_location=device))
+    plot_pca(erm_0, irm_0, envs_0, device)
