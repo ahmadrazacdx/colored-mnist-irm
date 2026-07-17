@@ -1,8 +1,8 @@
-"""Linear probing on frozen representations (color vs. digit class)"""
+"""Linear probing on frozen representations."""
 
 import os
-import torch
 import numpy as np
+import torch
 import matplotlib.pyplot as plt
 from sklearn.linear_model import LogisticRegression
 
@@ -11,197 +11,203 @@ from model import MLP
 from train import accuracy
 
 
-def extract_features_and_targets(model, envs, device):
-    """Extract penultimate-layer features, digit labels, and colors."""
+plt.rcParams.update({
+    'figure.facecolor': 'white',
+    'axes.facecolor': 'white',
+    'axes.grid': True,
+    'grid.alpha': 0.15,
+    'grid.linestyle': '-',
+    'font.family': 'sans-serif',
+    'font.size': 11,
+    'axes.labelsize': 12,
+    'axes.titlesize': 13,
+    'legend.fontsize': 10,
+    'figure.dpi': 150,
+})
+
+ERM_COLOR = '#D55E00' 
+IRM_COLOR = '#0072B2'  
+
+
+def extract_features(model, envs, device):
     model.eval()
-    all_feats, all_labels, all_colors = [], [], []
+    feats, labels, colors = [], [], []
     with torch.no_grad():
         for env in envs:
-            imgs = env['images'].to(device)
-            feats = model.features(imgs)
-            
-            all_feats.append(feats.cpu().numpy())
-            all_labels.append(env['labels'].cpu().numpy())
-            all_colors.append(env['colors'].cpu().numpy())
-            
-    return (
-        np.concatenate(all_feats, axis=0),
-        np.concatenate(all_labels, axis=0).ravel(),
-        np.concatenate(all_colors, axis=0).ravel()
-    )
+            feats.append(model.features(env['images'].to(device)).cpu().numpy())
+            labels.append(env['labels'].cpu().numpy())
+            colors.append(env['colors'].cpu().numpy())
+    return np.concatenate(feats), np.concatenate(labels).ravel(), np.concatenate(colors).ravel()
 
 
-def train_probe(X_train, y_train, X_test, y_test):
-    clf = LogisticRegression(max_iter=1000, C=1.0)
-    clf.fit(X_train, y_train)
-    return clf.score(X_test, y_test)
+def train_probe(X_tr, y_tr, X_te, y_te):
+    return LogisticRegression(max_iter=1000, C=1.0).fit(X_tr, y_tr).score(X_te, y_te)
 
-def generate_accuracy_plot(erm_means, erm_stds, irm_means, irm_stds):
-    envs = ['Env1 (90% corr)', 'Env2 (80% corr)', 'Test (10% corr)']
-    x = np.arange(len(envs))
-    width = 0.35
+def plot_accuracy(erm_m, erm_s, irm_m, irm_s):
+    labels = ['Env1\n(90% corr)', 'Env2\n(80% corr)', 'Test\n(10% corr)']
+    x = np.arange(len(labels))
+    w = 0.32
 
-    fig, ax = plt.subplots(figsize=(9, 6))
-    eb_kwargs = dict(ecolor='black', capsize=4, alpha=0.7)
+    fig, ax = plt.subplots(figsize=(7, 4.5))
+    ax.bar(x - w/2, erm_m, w, yerr=erm_s, label='ERM', color=ERM_COLOR,
+           capsize=3, error_kw={'linewidth': 1.2})
+    ax.bar(x + w/2, irm_m, w, yerr=irm_s, label='IRM', color=IRM_COLOR,
+           capsize=3, error_kw={'linewidth': 1.2})
 
-    rects1 = ax.bar(x - width/2, erm_means, width, yerr=erm_stds, label='ERM', color='#e74c3c', error_kw=eb_kwargs)
-    rects2 = ax.bar(x + width/2, irm_means, width, yerr=irm_stds, label='IRM', color='#2ecc71', error_kw=eb_kwargs)
-
+    ax.axhline(0.50, color='gray', ls='--', lw=0.8, alpha=0.6, label='Chance')
+    ax.axhline(0.75, color='gray', ls=':', lw=0.8, alpha=0.6, label='Shape ceiling')
     ax.set_ylabel('Accuracy')
-    ax.set_title('ERM vs. IRM Generalization Performance (3 Seeds)')
+    ax.set_title('ERM vs IRM Generalization')
     ax.set_xticks(x)
-    ax.set_xticklabels(envs)
-    ax.set_ylim(0, 1.0)
-    ax.axhline(y=0.5, color='gray', linestyle='--', alpha=0.5, label='Chance (50%)')
-    ax.axhline(y=0.75, color='blue', linestyle=':', alpha=0.5, label='Shape Ceiling (75%)')
-    ax.legend()
+    ax.set_xticklabels(labels)
+    ax.set_ylim(0, 1.12)
+    ax.legend(loc='upper right', framealpha=0.9)
 
-    def autolabel(rects, means):
-        for idx, rect in enumerate(rects):
-            height = rect.get_height()
-            ax.annotate(f'{means[idx]:.1%}',
-                        xy=(rect.get_x() + rect.get_width() / 2, height),
-                        xytext=(0, 3),
-                        textcoords="offset points",
-                        ha='center', va='bottom', fontsize=9)
-
-    autolabel(rects1, erm_means)
-    autolabel(rects2, irm_means)
+    for bars, means in [(ax.patches[:3], erm_m), (ax.patches[3:], irm_m)]:
+        for bar, val in zip(bars, means):
+            y = bar.get_height()
+            if y > 0.85:
+                ax.text(bar.get_x() + bar.get_width()/2, y - 0.06,
+                        f'{val:.1%}', ha='center', va='top', fontsize=9,
+                        fontweight='bold', color='white')
+            else:
+                ax.text(bar.get_x() + bar.get_width()/2, y + 0.02,
+                        f'{val:.1%}', ha='center', va='bottom', fontsize=9)
 
     plt.tight_layout()
-    plt.savefig('figures/erm_vs_irm_accuracy.png', dpi=150)
+    plt.savefig('figures/erm_vs_irm_accuracy.png', dpi=150, bbox_inches='tight')
     plt.close()
-    print("Saved figures/erm_vs_irm_accuracy.png")
+    print('Saved figures/erm_vs_irm_accuracy.png')
 
-def generate_probe_plot(probe_means, probe_stds):
-    categories = ['Color Probe (Spurious)', 'Digit Probe (Causal)']
-    x = np.arange(len(categories))
-    width = 0.35
 
-    erm_scores = [probe_means['erm_color'], probe_means['erm_digit']]
-    irm_scores = [probe_means['irm_color'], probe_means['irm_digit']]
-    
-    erm_errs = [probe_stds['erm_color'], probe_stds['erm_digit']]
-    irm_errs = [probe_stds['irm_color'], probe_stds['irm_digit']]
-    eb_kwargs = dict(ecolor='black', capsize=4, alpha=0.7)
+def plot_probes(means, stds):
+    """Color vs Digit probe bar chart."""
+    labels = ['Color probe\n(spurious)', 'Digit probe\n(causal)']
+    x = np.arange(len(labels))
+    w = 0.32
 
-    fig, ax = plt.subplots(figsize=(9, 6))
-    rects1 = ax.bar(x - width/2, erm_scores, width, yerr=erm_errs, label='ERM Representation', color='#e74c3c', error_kw=eb_kwargs)
-    rects2 = ax.bar(x + width/2, irm_scores, width, yerr=irm_errs, label='IRM Representation', color='#2ecc71', error_kw=eb_kwargs)
+    erm_vals = [means['erm_color'], means['erm_digit']]
+    irm_vals = [means['irm_color'], means['irm_digit']]
+    erm_err = [stds['erm_color'], stds['erm_digit']]
+    irm_err = [stds['irm_color'], stds['irm_digit']]
 
-    ax.set_ylabel('Probe Accuracy')
-    ax.set_title('Representation Probing: What did the models learn? (3 Seeds)')
+    fig, ax = plt.subplots(figsize=(6, 4.5))
+    ax.bar(x - w/2, erm_vals, w, yerr=erm_err, label='ERM repr.', color=ERM_COLOR,
+           capsize=3, error_kw={'linewidth': 1.2})
+    ax.bar(x + w/2, irm_vals, w, yerr=irm_err, label='IRM repr.', color=IRM_COLOR,
+           capsize=3, error_kw={'linewidth': 1.2})
+
+    ax.axhline(0.50, color='gray', ls='--', lw=0.8, alpha=0.6, label='Chance')
+    ax.set_ylabel('Probe accuracy')
+    ax.set_title('Representation probing')
     ax.set_xticks(x)
-    ax.set_xticklabels(categories)
-    ax.set_ylim(0, 1.0)
-    ax.axhline(y=0.5, color='gray', linestyle='--', alpha=0.5, label='Chance (50%)')
-    ax.legend()
+    ax.set_xticklabels(labels)
+    ax.set_ylim(0, 1.12)
+    ax.legend(loc='upper right', framealpha=0.9)
 
-    def autolabel(rects, scores):
-        for idx, rect in enumerate(rects):
-            height = rect.get_height()
-            ax.annotate(f'{scores[idx]:.1%}',
-                        xy=(rect.get_x() + rect.get_width() / 2, height),
-                        xytext=(0, 3),
-                        textcoords="offset points",
-                        ha='center', va='bottom', fontsize=9)
-
-    autolabel(rects1, erm_scores)
-    autolabel(rects2, irm_scores)
+    for bars, vals in [(ax.patches[:2], erm_vals), (ax.patches[2:], irm_vals)]:
+        for bar, val in zip(bars, vals):
+            y = bar.get_height()
+            if y > 0.85:
+                ax.text(bar.get_x() + bar.get_width()/2, y - 0.06,
+                        f'{val:.1%}', ha='center', va='top', fontsize=9,
+                        fontweight='bold', color='white')
+            else:
+                ax.text(bar.get_x() + bar.get_width()/2, y + 0.02,
+                        f'{val:.1%}', ha='center', va='bottom', fontsize=9)
 
     plt.tight_layout()
-    plt.savefig('figures/probe_results.png', dpi=150)
+    plt.savefig('figures/probe_results.png', dpi=150, bbox_inches='tight')
     plt.close()
-    print("Saved figures/probe_results.png")
+    print('Saved figures/probe_results.png')
 
+
+def plot_dynamics(erm_hist, irm_hist, anneal_step=190):
+    fig, ax = plt.subplots(figsize=(7, 4.5))
+
+    erm_train = (erm_hist[:, 1] + erm_hist[:, 2]) / 2
+    irm_train = (irm_hist[:, 1] + irm_hist[:, 2]) / 2
+
+    ax.plot(erm_hist[:, 0], erm_train, color=ERM_COLOR, ls='--', alpha=0.5, lw=1.2, label='ERM train')
+    ax.plot(erm_hist[:, 0], erm_hist[:, 3], color=ERM_COLOR, lw=2.2, label='ERM test')
+    ax.plot(irm_hist[:, 0], irm_train, color=IRM_COLOR, ls='--', alpha=0.5, lw=1.2, label='IRM train')
+    ax.plot(irm_hist[:, 0], irm_hist[:, 3], color=IRM_COLOR, lw=2.2, label='IRM test')
+
+    ax.axvline(anneal_step, color='black', ls=':', lw=1, alpha=0.6)
+    ax.text(anneal_step + 5, 0.08, 'penalty on', fontsize=9, alpha=0.7)
+
+    ax.axhline(0.50, color='gray', ls='--', lw=0.7, alpha=0.4)
+    ax.axhline(0.75, color='gray', ls=':', lw=0.7, alpha=0.4)
+    ax.text(505, 0.50, 'chance', fontsize=8, alpha=0.5, va='bottom')
+    ax.text(505, 0.75, '75%', fontsize=8, alpha=0.5, va='bottom')
+
+    ax.set_xlabel('Training step')
+    ax.set_ylabel('Accuracy')
+    ax.set_title('Training dynamics (ERM vs IRM)')
+    ax.set_xlim(0, 510)
+    ax.set_ylim(0, 1.05)
+    ax.legend(loc='center right', framealpha=0.9)
+
+    plt.tight_layout()
+    plt.savefig('figures/training_dynamics.png', dpi=150, bbox_inches='tight')
+    plt.close()
+    print('Saved figures/training_dynamics.png')
 
 if __name__ == '__main__':
     os.makedirs('figures', exist_ok=True)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
     SEEDS = [0, 1, 2]
-    all_erm_accs = []
-    all_irm_accs = []
-    
-    all_erm_color_probes = []
-    all_erm_digit_probes = []
-    all_irm_color_probes = []
-    all_irm_digit_probes = []
-    
+
+    all_erm_accs, all_irm_accs = [], []
+    erm_color_p, erm_digit_p, irm_color_p, irm_digit_p = [], [], [], []
+
+    print(f'Evaluating {len(SEEDS)} seeds: {SEEDS}...')
+
     for seed in SEEDS:
         set_seeds(seed)
         envs = make_envs(seed=seed)
-        erm_model = MLP().to(device)
-        irm_model = MLP().to(device)
-        
-        erm_path = f'erm_model_seed{seed}.pt'
-        irm_path = f'irm_model_seed{seed}.pt'
-        
-        if not os.path.exists(erm_path) or not os.path.exists(irm_path):
-            raise FileNotFoundError(
-                f"Missing checkpoints for seed {seed}. "
-                f"Please run: python train.py --mode erm AND python train.py --mode irm"
-            )
-            
-        erm_model.load_state_dict(torch.load(erm_path, map_location=device))
-        irm_model.load_state_dict(torch.load(irm_path, map_location=device))
-        erm_accs = [accuracy(erm_model, e['images'].to(device), e['labels'].to(device)) for e in envs]
-        irm_accs = [accuracy(irm_model, e['images'].to(device), e['labels'].to(device)) for e in envs]
-        all_erm_accs.append(erm_accs)
-        all_irm_accs.append(irm_accs)
-        
-        erm_feats, labels, colors = extract_features_and_targets(erm_model, envs, device)
-        irm_feats, _, _ = extract_features_and_targets(irm_model, envs, device)
 
-        n_samples = len(labels)
-        indices = np.random.permutation(n_samples)
-        split = int(n_samples * 0.8)
-        train_idx, test_idx = indices[:split], indices[split:]
-        
-        # Train Probes
-        erm_color_acc = train_probe(erm_feats[train_idx], colors[train_idx], erm_feats[test_idx], colors[test_idx])
-        erm_digit_acc = train_probe(erm_feats[train_idx], labels[train_idx], erm_feats[test_idx], labels[test_idx])
-        
-        irm_color_acc = train_probe(irm_feats[train_idx], colors[train_idx], irm_feats[test_idx], colors[test_idx])
-        irm_digit_acc = train_probe(irm_feats[train_idx], labels[train_idx], irm_feats[test_idx], labels[test_idx])
-        
-        all_erm_color_probes.append(erm_color_acc)
-        all_erm_digit_probes.append(erm_digit_acc)
-        all_irm_color_probes.append(irm_color_acc)
-        all_irm_digit_probes.append(irm_digit_acc)
+        erm_model, irm_model = MLP().to(device), MLP().to(device)
+        erm_model.load_state_dict(torch.load(f'erm_model_seed{seed}.pt', map_location=device))
+        irm_model.load_state_dict(torch.load(f'irm_model_seed{seed}.pt', map_location=device))
 
-    all_erm_accs = np.array(all_erm_accs)
-    all_irm_accs = np.array(all_irm_accs)
-    
-    erm_means = all_erm_accs.mean(axis=0)
-    erm_stds = all_erm_accs.std(axis=0)
-    irm_means = all_irm_accs.mean(axis=0)
-    irm_stds = all_irm_accs.std(axis=0)
+        all_erm_accs.append([accuracy(erm_model, e['images'].to(device), e['labels'].to(device)) for e in envs])
+        all_irm_accs.append([accuracy(irm_model, e['images'].to(device), e['labels'].to(device)) for e in envs])
 
-    erm_color_mean, erm_color_std = np.mean(all_erm_color_probes), np.std(all_erm_color_probes)
-    erm_digit_mean, erm_digit_std = np.mean(all_erm_digit_probes), np.std(all_erm_digit_probes)
-    irm_color_mean, irm_color_std = np.mean(all_irm_color_probes), np.std(all_irm_color_probes)
-    irm_digit_mean, irm_digit_std = np.mean(all_irm_digit_probes), np.std(all_irm_digit_probes)
+        erm_feats, labels, colors = extract_features(erm_model, envs, device)
+        irm_feats, _, _ = extract_features(irm_model, envs, device)
 
-    print("\n" + "="*70)
-    print(f"{'PROBE TARGET':<25} | {'ERM FEATURES':<18} | {'IRM FEATURES':<18}")
-    print("-"*70)
-    print(f"{'Color (Spurious)':<25} | {erm_color_mean:.1%} ({erm_color_std:.1%})     | {irm_color_mean:.1%} ({irm_color_std:.1%})")
-    print(f"{'Digit Label (Causal)':<25} | {erm_digit_mean:.1%} ({erm_digit_std:.1%})     | {irm_digit_mean:.1%} ({irm_digit_std:.1%})")
-    print("="*70)
+        idx = np.random.permutation(len(labels))
+        s = int(len(labels) * 0.8)
+        tr, te = idx[:s], idx[s:]
+        erm_color_p.append(train_probe(erm_feats[tr], colors[tr], erm_feats[te], colors[te]))
+        erm_digit_p.append(train_probe(erm_feats[tr], labels[tr], erm_feats[te], labels[te]))
+        irm_color_p.append(train_probe(irm_feats[tr], colors[tr], irm_feats[te], colors[te]))
+        irm_digit_p.append(train_probe(irm_feats[tr], labels[tr], irm_feats[te], labels[te]))
 
-    generate_accuracy_plot(erm_means, erm_stds, irm_means, irm_stds)
-    
-    probe_means = {
-        'erm_color': erm_color_mean,
-        'erm_digit': erm_digit_mean,
-        'irm_color': irm_color_mean,
-        'irm_digit': irm_digit_mean
-    }
-    probe_stds = {
-        'erm_color': erm_color_std,
-        'erm_digit': erm_digit_std,
-        'irm_color': irm_color_std,
-        'irm_digit': irm_digit_std
-    }
-    generate_probe_plot(probe_means, probe_stds)
+    erm_m, erm_s = np.mean(all_erm_accs, 0), np.std(all_erm_accs, 0)
+    irm_m, irm_s = np.mean(all_irm_accs, 0), np.std(all_irm_accs, 0)
+
+    probe_means = dict(erm_color=np.mean(erm_color_p), erm_digit=np.mean(erm_digit_p),
+                       irm_color=np.mean(irm_color_p), irm_digit=np.mean(irm_digit_p))
+    probe_stds = dict(erm_color=np.std(erm_color_p), erm_digit=np.std(erm_digit_p),
+                      irm_color=np.std(irm_color_p), irm_digit=np.std(irm_digit_p))
+
+    print('\n' + '='*60)
+    print(f"{'Probe target':<22} | {'ERM features':<16} | {'IRM features':<16}")
+    print('-'*60)
+    for name, ek, ik in [('Color (spurious)', 'erm_color', 'irm_color'),
+                          ('Digit (causal)',   'erm_digit', 'irm_digit')]:
+        print(f'{name:<22} | {probe_means[ek]:.1%} ({probe_stds[ek]:.1%})'
+              f'       | {probe_means[ik]:.1%} ({probe_stds[ik]:.1%})')
+    print('='*60)
+
+    plot_accuracy(erm_m, erm_s, irm_m, irm_s)
+    plot_probes(probe_means, probe_stds)
+
+    erm_hist_path = 'erm_history.npy'
+    irm_hist_path = 'irm_history.npy'
+    if os.path.exists(erm_hist_path) and os.path.exists(irm_hist_path):
+        plot_dynamics(np.load(erm_hist_path), np.load(irm_hist_path))
+    else:
+        print('Skipping dynamics plot (re-run train.py to generate history files)')

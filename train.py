@@ -1,6 +1,7 @@
 """Train ERM or IRM on Colored MNIST."""
 
 import argparse
+import numpy as np
 import torch
 import torch.nn.functional as F
 
@@ -25,6 +26,7 @@ def train_erm(envs, args, verbose=False):
     """Empirical Risk Minimization"""
     model = MLP().to(args.device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    history = []
 
     for step in range(1, args.steps + 1):
         loss = 0.0
@@ -37,13 +39,15 @@ def train_erm(envs, args, verbose=False):
         loss.backward()
         optimizer.step()
 
-        if verbose and (step % 100 == 0 or step == 1):
+        if step % 10 == 0 or step == 1:
             accs = [accuracy(model, e['images'], e['labels']) for e in envs]
-            print(f'  step {step:4d}  |  '
-                  f'env1 {accs[0]:.1%}  env2 {accs[1]:.1%}  '
-                  f'test {accs[2]:.1%}  |  loss {loss.item():.4f}')
+            history.append([step] + accs)
+            if verbose and (step % 100 == 0 or step == 1):
+                print(f'  step {step:4d}  |  '
+                      f'env1 {accs[0]:.1%}  env2 {accs[1]:.1%}  '
+                      f'test {accs[2]:.1%}  |  loss {loss.item():.4f}')
 
-    return model
+    return model, np.array(history)
 
 
 # IRM
@@ -53,6 +57,7 @@ def train_irm(envs, args, verbose=False):
     """Invariant Risk Minimization with IRM-v1 penalty"""
     model = MLP().to(args.device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    history = []
 
     for step in range(1, args.steps + 1):
         losses, penalties = [], []
@@ -75,14 +80,16 @@ def train_irm(envs, args, verbose=False):
         loss.backward()
         optimizer.step()
 
-        if verbose and (step % 100 == 0 or step == 1):
+        if step % 10 == 0 or step == 1:
             accs = [accuracy(model, e['images'], e['labels']) for e in envs]
-            print(f'  step {step:4d}  |  '
-                  f'env1 {accs[0]:.1%}  env2 {accs[1]:.1%}  '
-                  f'test {accs[2]:.1%}  |  '
-                  f'nll {nll.item():.4f}  penalty {penalty.item():.4f}')
+            history.append([step] + accs)
+            if verbose and (step % 100 == 0 or step == 1):
+                print(f'  step {step:4d}  |  '
+                      f'env1 {accs[0]:.1%}  env2 {accs[1]:.1%}  '
+                      f'test {accs[2]:.1%}  |  '
+                      f'nll {nll.item():.4f}  penalty {penalty.item():.4f}')
 
-    return model
+    return model, np.array(history)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train on Colored MNIST')
@@ -102,7 +109,6 @@ if __name__ == '__main__':
         print(f'penalty_weight={args.penalty_weight} anneal_steps={args.anneal_steps}')
     print('-' * 60)
 
-    import numpy as np
     all_accs = []
     for i, seed in enumerate(SEEDS):
         set_seeds(seed)
@@ -112,12 +118,14 @@ if __name__ == '__main__':
                 env[key] = env[key].to(args.device)
 
         train_fn = train_erm if args.mode == 'erm' else train_irm
-        model = train_fn(envs, args, verbose=(i == 0))
+        model, history = train_fn(envs, args, verbose=(i == 0))
         
         accs = [accuracy(model, e['images'], e['labels']) for e in envs]
         all_accs.append(accs)
         print(f'Seed {seed} | env1 {accs[0]:.1%} | env2 {accs[1]:.1%} | test {accs[2]:.1%}')
         torch.save(model.state_dict(), f'{args.mode}_model_seed{seed}.pt')
+        if seed == 0:
+            np.save(f'{args.mode}_history.npy', history)
 
     # Compute and report statistics
     all_accs = np.array(all_accs)

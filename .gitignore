@@ -222,3 +222,4 @@ extra/
 # Project-specific
 data/
 *.pt
+*.npy
