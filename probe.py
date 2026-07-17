@@ -153,6 +153,51 @@ def plot_dynamics(erm_hist, irm_hist, anneal_step=190):
     plt.close()
     print('Saved figures/training_dynamics.png')
 
+
+def plot_pca(erm_model, irm_model, envs, device):
+    results = {}
+    for model, name in [(erm_model, 'ERM'), (irm_model, 'IRM')]:
+        feats, labels, colors = extract_features(model, envs, device)
+        w_c = LogisticRegression(max_iter=1000, C=1.0).fit(feats, colors).coef_[0]
+        w_d = LogisticRegression(max_iter=1000, C=1.0).fit(feats, labels).coef_[0]
+        w_c = w_c / np.linalg.norm(w_c)
+        w_d = w_d / np.linalg.norm(w_d)
+
+        head_w = model.head.weight.data[0].cpu().numpy()
+        head_w = head_w / np.linalg.norm(head_w)
+
+        results[name] = (abs(np.dot(head_w, w_c)), abs(np.dot(head_w, w_d)))
+        print(f'  {name} head alignment:  '
+              f'|cos(head, color)| = {results[name][0]:.3f}   '
+              f'|cos(head, digit)| = {results[name][1]:.3f}')
+
+    fig, ax = plt.subplots(figsize=(5, 4))
+    x = np.arange(2)
+    w = 0.30
+    color_vals = [results['ERM'][0], results['IRM'][0]]
+    digit_vals = [results['ERM'][1], results['IRM'][1]]
+
+    ax.bar(x - w/2, color_vals, w, label='Color direction', color='#c0392b', alpha=0.85)
+    ax.bar(x + w/2, digit_vals, w, label='Digit direction', color='#2980b9', alpha=0.85)
+    ax.set_xticks(x)
+    ax.set_xticklabels(['ERM', 'IRM'], fontsize=12)
+    ax.set_ylabel('|cos(head, probe direction)|', fontsize=10)
+    ax.set_ylim(0, 1.0)
+    ax.set_title('Classifier head alignment', fontsize=13)
+    ax.legend(fontsize=10, framealpha=0.9)
+
+    for container in ax.containers:
+        for bar in container:
+            h = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2, h + 0.02,
+                    f'{h:.2f}', ha='center', va='bottom', fontsize=10, fontweight='bold')
+
+    plt.tight_layout()
+    plt.savefig('figures/pca_representations.png', dpi=150, bbox_inches='tight')
+    plt.close()
+    print('Saved figures/pca_representations.png')
+
+
 if __name__ == '__main__':
     os.makedirs('figures', exist_ok=True)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -211,3 +256,9 @@ if __name__ == '__main__':
     else:
         print('Skipping dynamics plot (re-run train.py to generate history files)')
 
+    set_seeds(0)
+    envs_0 = make_envs(seed=0)
+    erm_0, irm_0 = MLP().to(device), MLP().to(device)
+    erm_0.load_state_dict(torch.load('erm_model_seed0.pt', map_location=device))
+    irm_0.load_state_dict(torch.load('irm_model_seed0.pt', map_location=device))
+    plot_pca(erm_0, irm_0, envs_0, device)
