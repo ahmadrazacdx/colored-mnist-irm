@@ -151,26 +151,11 @@ Both representations retain perfect color information, a linear probe decodes co
 
 The digit probe confirms that IRM's representation retains causal shape information ($74.3\%$), closely matching its actual test accuracy. ERM's digit probe is higher ($85.6\%$) because its representation encodes everything aggressively, both color and shape, but it uses the wrong one at test time.
 
-### 5.4 Representation Geometry
-
-The probing results show both representations encode color perfectly — so why does ERM fail and IRM succeed? The answer lies in the **classifier head**, not the representation. Both models have 390-dimensional feature spaces with color and digit encoded along orthogonal directions. The difference is which direction the head points.
-
-We measure this by computing $|\cos(\hat{w}_{head},\, \hat{w}_{color})|$ and $|\cos(\hat{w}_{head},\, \hat{w}_{digit})|$, where $\hat{w}_{head}$ is the head's weight vector and $\hat{w}_{color}$, $\hat{w}_{digit}$ are the probe directions.
-
-<div align="center">
-
-  <img src="./figures/pca_representations.png" alt="Representation Geometry" width="450" />
-
-  **Figure 5:** Classifier head alignment. We compute the cosine similarity between the model's head weight vector and the linear probe directions for color and digit. ERM's head aligns strongly with the color direction, while IRM's head aligns strictly with the digit direction.
-</div>
-
-ERM's head aligns with the color probe direction — it classifies by color. IRM's head aligns with the digit probe direction — it classifies by shape. The representation geometry is similar in both models (both encode color and digit along separate directions), but IRM's penalty rotated the head away from the spurious feature and toward the causal one. This is precisely what "predictor alignment" means: IRM doesn't erase color from the representation, it makes the classifier ignore it.
-
 ## 6. Discussion
 
 - **IRM Stability:** IRM-v1 was remarkably stable here (test std = $0.1\%$). This is not always the case. [Gulrajani & Lopez-Paz (2021)](https://arxiv.org/abs/2007.01434) showed that IRM can be highly sensitive to hyperparameters on more complex benchmarks like DomainBed. The stability we observe is partly due to the simplicity of Colored MNIST.
 - **Gap from Shape Ceiling:** IRM reaches $\sim 66.2\%$ vs the theoretical $75\%$ ceiling. This gap comes from the interaction between $25\%$ label noise and IRM's optimization dynamics. Longer training, learning rate tuning, or stronger penalty weights could close it.
-- **The $100\%$ Color Probe:** IRM's representation perfectly encodes color while ignoring it for prediction. The PCA visualization (Figure 5) confirms this mechanistically: color is not erased, it is rotated orthogonal to the prediction axis. Methods like DANN that enforce a domain-adversarial loss would actively erase color from the representation, which is a fundamentally different approach.
+- **The $100\%$ Color Probe:** IRM's representation perfectly encodes color while ignoring it for prediction. This tells us that IRM-v1 operates at the level of the classifier, not the representation. Whether this is desirable depends on the use case, as in safety-critical settings, we might want the representation itself to be scrubbed of spurious features (which would require a different method).
 
 ## 7. References
 
