@@ -123,7 +123,7 @@ def plot_probes(means, stds):
 
 
 def plot_dynamics(erm_hist, irm_hist, anneal_step=190):
-    fig, ax = plt.subplots(figsize=(7, 4.5))
+    fig, ax = plt.subplots(figsize=(7.5, 4.5))
 
     erm_train = (erm_hist[:, 1] + erm_hist[:, 2]) / 2
     irm_train = (irm_hist[:, 1] + irm_hist[:, 2]) / 2
@@ -134,19 +134,19 @@ def plot_dynamics(erm_hist, irm_hist, anneal_step=190):
     ax.plot(irm_hist[:, 0], irm_hist[:, 3], color=IRM_COLOR, lw=2.2, label='IRM test')
 
     ax.axvline(anneal_step, color='black', ls=':', lw=1, alpha=0.6)
-    ax.text(anneal_step + 5, 0.08, 'penalty on', fontsize=9, alpha=0.7)
+    ax.text(anneal_step + 8, 0.08, 'penalty on', fontsize=9, alpha=0.7)
 
     ax.axhline(0.50, color='gray', ls='--', lw=0.7, alpha=0.4)
     ax.axhline(0.75, color='gray', ls=':', lw=0.7, alpha=0.4)
-    ax.text(505, 0.50, 'chance', fontsize=8, alpha=0.5, va='bottom')
-    ax.text(505, 0.75, '75%', fontsize=8, alpha=0.5, va='bottom')
+    ax.text(515, 0.505, 'chance', fontsize=8, alpha=0.5, va='bottom')
+    ax.text(515, 0.755, '75%', fontsize=8, alpha=0.5, va='bottom')
 
     ax.set_xlabel('Training step')
     ax.set_ylabel('Accuracy')
     ax.set_title('Training dynamics (ERM vs IRM)')
-    ax.set_xlim(0, 510)
+    ax.set_xlim(0, 550)
     ax.set_ylim(0, 1.05)
-    ax.legend(loc='center right', framealpha=0.9)
+    ax.legend(loc='upper left', bbox_to_anchor=(1.01, 1), framealpha=0.9, borderaxespad=0)
 
     plt.tight_layout()
     plt.savefig('figures/training_dynamics.png', dpi=150, bbox_inches='tight')
@@ -161,7 +161,6 @@ if __name__ == '__main__':
     all_erm_accs, all_irm_accs = [], []
     erm_color_p, erm_digit_p, irm_color_p, irm_digit_p = [], [], [], []
 
-    print(f'Evaluating {len(SEEDS)} seeds: {SEEDS}...')
 
     for seed in SEEDS:
         set_seeds(seed)
@@ -211,3 +210,4 @@ if __name__ == '__main__':
         plot_dynamics(np.load(erm_hist_path), np.load(irm_hist_path))
     else:
         print('Skipping dynamics plot (re-run train.py to generate history files)')
+
