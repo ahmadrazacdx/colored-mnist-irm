@@ -19,11 +19,102 @@
 
 ## 1. Introduction
 
-This repository reproduces the core [Colored MNIST](https://arxiv.org/abs/1907.02893) experiments from [Arjovsky et al. (2019)](https://arxiv.org/abs/1907.02893) and extends them with linear representation probing. Colored MNIST is a synthetic benchmark that tests out-of-distribution generalization by injecting a spurious color feature that strongly correlates with the label during training but anti-correlates at test time. While Empirical Risk Minimization (ERM) exploits this shortcut and fails on the test set, Invariant Risk Minimization (IRM) learns the underlying causal shape features.
+This repository reproduces the [Colored MNIST](https://arxiv.org/abs/1907.02893) experiments from [Arjovsky et al. (2019)](https://arxiv.org/abs/1907.02893) and extends them with a linear probing analysis of the learned representations. Colored MNIST is a synthetic benchmark for out-of-distribution generalization: a spurious color feature is injected into each digit, strongly correlated with the label at training time and anti-correlated at test time. Empirical Risk Minimization (ERM) exploits this shortcut and fails under the shift; Invariant Risk Minimization (IRM) instead recovers the underlying causal (shape) feature.
 
-## 2. Usage
+## 2. Key Results
 
-### 2.1 Installation
+- ERM fits both training environments almost perfectly ($>96\%$) but collapses to $29.4\%$ test accuracy once the color–label correlation reverses.
+- IRM trades training accuracy (down to $\sim73\%$) for robustness, reaching $66.2\%$ OOD accuracy, closely matching the original paper.
+- A linear probe still recovers color from IRM's representation at $100\%$ accuracy. IRM doesn't remove the spurious feature, it teaches the classifier to ignore it.
+
+## 3. Dataset
+
+Binary MNIST (digits $0$–$4$: class $0$, digits $5$–$9$: class $1$) with $25\%$ label noise. Each digit is colored red or green, and color correlates with the noisy label at a different strength per environment:
+
+<div align="center" markdown="1">
+
+| Environment | Samples | Color–Label Correlation |
+| --- | --- | --- |
+| $Env_{tr_1} \; (\text{train})$ | $25,000$ | $90.1\%$ |
+| $Env_{tr_2} \; (\text{train})$ | $25,000$ | $79.9\%$ |
+| $Env_{test} \; (\text{test})$ | $10,000$ | $9.9\% \; (\text{reversed})$ |
+
+</div>
+
+<div align="center">
+
+  <img src="./figures/sample_envs.png" alt="Sample Environments" width="500" />
+
+  **Figure 2:** Sample environments demonstrating the varying color-label correlation.
+</div>
+
+The $25\%$ label noise caps the Bayes-optimal accuracy at $75\%$, even for a classifier that uses shape alone. This keeps the task non-trivial: without noise, a shape-based classifier would dominate color outright, and the shortcut would never tempt the optimizer in the first place.
+
+## 4. Architecture
+
+A 2-hidden-layer MLP ($390$ units, ReLU), matching the original IRM paper. Input is a 2-channel $14 \times 14$ image (downsampled MNIST, one channel per color); output is a single logit for binary classification. The network is split into an `encoder` (hidden layers) and a `head` (final linear layer), so frozen encoder features can be extracted for probing.
+
+## 5. Experiments
+
+Both methods are trained over $3$ random seeds. Tables report mean $\pm$ standard deviation.
+
+### 5.1 OOD Generalization
+
+**ERM** pools all training data and minimizes cross-entropy. It has no notion of which features are spurious, it just follows the strongest gradient signal, which happens to be color.
+
+**IRM** adds a per-environment penalty: for each environment, check whether scaling the logits by a fixed dummy scalar $w = 1.0$ is already optimal. A non-zero gradient of the loss w.r.t. $w$ means the optimal classifier differs across environments, i.e. the representation still encodes something environment-specific. Penalizing the squared norm of this gradient pushes the model toward features for which a single classifier is optimal everywhere. The penalty is switched on after a $190$-step ERM warmup.
+
+<div align="center" markdown="1">
+
+| Method | $Env_1$ | $Env_2$ | Test |
+| --- | --- | --- | --- |
+| **ERM** | $97.6\% \pm 0.4\%$ | $96.1\% \pm 0.3\%$ | **$29.4\% \pm 1.8\%$** |
+| **IRM** | $73.0\% \pm 1.2\%$ | $72.8\% \pm 1.1\%$ | **$66.2\% \pm 0.1\%$** |
+
+</div>
+
+### 5.2 Representation Analysis
+
+We extract the $390$-dim encoder features from both trained models and fit logistic regression probes to recover either the spurious feature (color) or the causal feature (digit class).
+
+<div align="center" markdown="1">
+
+| Probe Target | ERM Features | IRM Features |
+| --- | --- | --- |
+| **Color** (spurious) | $100.0\% \pm 0.0\%$ | $100.0\% \pm 0.0\%$ |
+| **Digit** (causal) | $85.6\% \pm 0.3\%$ | $74.3\% \pm 0.1\%$ |
+
+</div>
+
+<div align="center">
+
+  <img src="./figures/probe_results.png" alt="Probe Results" width="500" />
+
+  **Figure 3:** Representation probing results for ERM and IRM features.
+</div>
+
+The digit probe on IRM features ($74.3\%$) tracks IRM's actual test accuracy closely, consistent with a representation that retains mostly causal information. ERM's digit probe is higher ($85.6\%$) because its representation packs in everything, color and shape alike, it simply relies on the wrong one at test time. Color remains linearly decodable from both representations at $100\%$, so IRM's gain in robustness comes from how the head uses the representation, not from erasing color from it.
+
+### 5.3 Training Dynamics
+
+<div align="center" markdown="1">
+
+  <img src="./figures/training_dynamics.png" alt="Training Dynamics" width="500" />
+
+  **Figure 4:** Training dynamics of ERM and IRM showing the effect of the invariance penalty.
+</div>
+
+The phase transition at step $190$ is the most informative part of this experiment. Before it, IRM behaves identically to ERM: both latch onto color and test accuracy drifts down. The moment the penalty switches on, test accuracy reverses and climbs while training accuracy drops. This is the trade-off in action, the model gives up a feature that helps in-distribution for one that generalizes.
+
+## 6. Discussion
+
+- **IRM stability:** IRM-v1 was stable here (test std $= 0.1\%$), which isn't guaranteed in general. [Gulrajani & Lopez-Paz (2021)](https://arxiv.org/abs/2007.01434) show IRM can be highly sensitive to hyperparameters on harder benchmarks like DomainBed; the simplicity of Colored MNIST likely explains the stability observed here.
+- **Gap to the noise ceiling:** IRM reaches $66.2\%$ against the $75\%$ ceiling set by label noise. The gap likely comes from the interaction between the noise and IRM's optimization dynamics, longer training, LR tuning, or a stronger penalty weight are the obvious next things to try.
+- **Scope:** These results are limited to Colored MNIST with a single MLP architecture and default hyperparameters. The conclusions on OOD generalization and representation entanglement are consistent with the original IRM paper, though evaluating on harder, higher-dimensional benchmarks such as DomainBed is also a plausible extension.
+
+## 7. Usage
+
+### 7.1 Installation
 
 ```bash
 git clone https://github.com/ahmadrazacdx/colored-mnist-irm.git
@@ -31,15 +122,15 @@ cd colored-mnist-irm
 pip install -r requirements.txt
 ```
 
-### 2.2 Dataset Generation
+### 7.2 Dataset Generation
 
 ```bash
 python data.py
 ```
 
-### 2.3 Training
+### 7.3 Training
 
-Use `train.py` to train the models. The script supports both ERM and IRM methods. It accepts the following flags:
+`train.py` trains either method and accepts the following flags:
 
 <div align="center" markdown="1">
 
@@ -61,103 +152,15 @@ python train.py --mode erm
 python train.py --mode irm
 ```
 
-### 2.4 Probing
+### 7.4 Probing
 
-Extracts the frozen features from the trained models encoder and fits logistic regression probes to classify the causal or spurious features.
+Extracts frozen encoder features from the trained models and fits logistic regression probes to classify the causal or spurious feature.
 
 ```bash
 python probe.py
 ```
 
-## 3. Dataset
-
-Binary MNIST (digits $0-4$: class $0$, digits $5-9$: class $1$) with $25\%$ label noise. Each digit is colored red or green, where color correlates with the noisy label at different strengths per environment:
-
-<div align="center" markdown="1">
-
-| Environment | Samples | Color–Label Correlation |
-| --- | --- | --- |
-| $Env_{tr_1} \; (\text{train})$ | $25,000$ | $90.1\%$ |
-| $Env_{tr_2} \; (\text{train})$ | $25,000$ | $79.9\%$ |
-| $Env_{test} \; (\text{test})$ | $10,000$ | $9.9\% \; (\text{reversed})$ |
-
-</div>
-
-<div align="center">
-
-  <img src="./figures/sample_envs.png" alt="Sample Environments" width="500" />
-
-  **Figure 2:** Sample environments demonstrating the varying color-label correlation.
-</div>
-
-The $25\%$ label noise is important, it caps the Bayes-optimal accuracy at $75\%$ even for a perfect shape-based classifier. This prevents trivial solutions and makes the spurious shortcut (color at $\sim 85\%$ pooled correlation) genuinely tempting for the optimizer.
-
-## 4. Architecture
-
-$2$-hidden-layer MLP with $390$ units each (ReLU activations), matching the original IRM paper. Input is a $2$-channel $14 \times 14$ image (downsampled MNIST, one channel per color). Output is a single logit for binary classification. The network is split into an `encoder` (hidden layers) and a `head` (final linear layer), this split is built so we can extract frozen features for probing later without modifying anything.
-
-## 5. Experiments
-
-Both methods are trained over $3$ random seeds. The tables below report the mean and standard deviation.
-
-### 5.1 OOD Generalization
-
-**ERM** pools all training data and minimizes cross-entropy. It has no mechanism to detect which features are spurious, it simply follows the strongest gradient signal, which is color.
-
-**IRM** adds a per-environment penalty: for each environment, it checks whether scaling the logits by a dummy scalar $w=1.0$ is already optimal. If the gradient of the loss with respect to this scalar is non-zero, it means the representation encodes something environment-specific. Penalizing the squared norm of this gradient forces the model to find features where a single classifier works everywhere. The penalty is activated after $190$ warmup steps of pure ERM.
-
-<div align="center" markdown="1">
-
-| Method | $Env_1$ | $Env_2$ | Test |
-| --- | --- | --- | --- |
-| **ERM** | $97.6\% \pm 0.4\%$ | $96.1\% \pm 0.3\%$ | **$29.4\% \pm 1.8\%$** |
-| **IRM** | $73.0\% \pm 1.2\%$ | $72.8\% \pm 1.1\%$ | **$66.2\% \pm 0.1\%$** |
-
-</div>
-ERM achieves near-perfect training accuracy by exploiting color. This backfires at test time where color is anti-correlated with the label, and the model is confidently wrong. IRM sacrifices $\sim25$ points of training accuracy but gains genuine out-of-distribution generalization, approaching the $75\%$ shape-only ceiling. The standard deviation on IRM's test accuracy is just $0.1\%$, meaning the result is highly stable across seeds.
-
-### 5.2 Training Dynamics
-
-<div align="center" markdown="1">
-
-  <img src="./figures/training_dynamics.png" alt="Training Dynamics" width="500" />
-
-  **Figure 3:** Training dynamics of ERM and IRM showing the effect of the invariance penalty.
-</div>
-
-The phase transition at step $190$ is the most informative part of this experiment. During warmup (steps $1–190$), IRM behaves identically to ERM, both latch onto color, and test accuracy declines. The moment the invariance penalty activates, IRM's test accuracy reverses direction and climbs sharply while its training accuracy drops. This is the trade-off at work: the model is abandoning a feature that helps on the training distribution but hurts on the test distribution.
-
-### 5.3 Representation Analysis
-
-We extract the $390$-dimensional features from the penultimate layer of both trained models and fit logistic regression probes to classify either the spurious feature (color) or the causal feature (digit class).
-
-<div align="center" markdown="1">
-
-| Probe Target | ERM Features | IRM Features |
-| --- | --- | --- |
-| **Color** (spurious) | $100.0\% \pm 0.0\%$ | $100.0\% \pm 0.0\%$ |
-| **Digit** (causal) | $85.6\% \pm 0.3\%$ | $74.3\% \pm 0.1\%$ |
-
-</div>
-
-<div align="center">
-
-  <img src="./figures/probe_results.png" alt="Probe Results" width="500" />
-
-  **Figure 4:** Representation probing results for ERM and IRM features.
-</div>
-
-Both representations retain perfect color information, a linear probe decodes color at $100\%$ from both ERM and IRM features. This is expected and worth discussing: IRM-v1 is a **predictor alignment** method, not an information bottleneck. It makes the classifier head ignore color, but it doesn't force the representation to erase it. A method like DANN (domain-adversarial training) would actively try to remove color from the representation, which is a fundamentally different approach.
-
-The digit probe confirms that IRM's representation retains causal shape information ($74.3\%$), closely matching its actual test accuracy. ERM's digit probe is higher ($85.6\%$) because its representation encodes everything aggressively, both color and shape, but it uses the wrong one at test time.
-
-## 6. Discussion
-
-- **IRM Stability:** IRM-v1 was remarkably stable here (test std = $0.1\%$). This is not always the case. [Gulrajani & Lopez-Paz (2021)](https://arxiv.org/abs/2007.01434) showed that IRM can be highly sensitive to hyperparameters on more complex benchmarks like DomainBed. The stability we observe is partly due to the simplicity of Colored MNIST.
-- **Gap from Shape Ceiling:** IRM reaches $\sim 66.2\%$ vs the theoretical $75\%$ ceiling. This gap comes from the interaction between $25\%$ label noise and IRM's optimization dynamics. Longer training, learning rate tuning, or stronger penalty weights could close it.
-- **The $100\%$ Color Probe:** IRM's representation perfectly encodes color while ignoring it for prediction. This tells us that IRM-v1 operates at the level of the classifier, not the representation. Whether this is desirable depends on the use case, as in safety-critical settings, we might want the representation itself to be scrubbed of spurious features (which would require a different method).
-
-## 7. References
+## 8. References
 
 - Arjovsky, M., Bottou, L., Gulrajani, I., & Lopez-Paz, D. (2019). *Invariant Risk Minimization.* [arXiv:1907.02893](https://arxiv.org/abs/1907.02893)
 - Gulrajani, I., & Lopez-Paz, D. (2021). *In Search of Lost Domain Generalization.* ICLR 2021. [arXiv:2007.01434](https://arxiv.org/abs/2007.01434)
