@@ -25,7 +25,7 @@ This repository reproduces the [Colored MNIST](https://arxiv.org/abs/1907.02893)
 
 - ERM fits both training environments almost perfectly ($>96\%$) but collapses to $29.4\%$ test accuracy once the color–label correlation reverses.
 - IRM trades training accuracy (down to $\sim73\%$) for robustness, reaching $66.2\%$ OOD accuracy, closely matching the original paper.
-- A linear probe still recovers color from IRM's representation at $100\%$ accuracy. IRM doesn't remove the spurious feature, it teaches the classifier to ignore it.
+- A linear probe recovers color at $100\%$ and digit identity almost identically well ($\sim 91\%$) from *both* ERM's and IRM's representations. IRM doesn't change what the encoder represents, it changes how the head uses it.
 
 ## 3. Dataset
 
@@ -82,7 +82,7 @@ We extract the $390$-dim encoder features from both trained models and fit logis
 | Probe Target | ERM Features | IRM Features |
 | --- | --- | --- |
 | **Color** (spurious) | $100.0\% \pm 0.0\%$ | $100.0\% \pm 0.0\%$ |
-| **Digit** (causal) | $85.6\% \pm 0.3\%$ | $74.3\% \pm 0.1\%$ |
+| **Digit** (causal) | $91.6\% \pm 0.3\%$ | $91.3\% \pm 0.5\%$ |
 
 </div>
 
@@ -93,7 +93,7 @@ We extract the $390$-dim encoder features from both trained models and fit logis
   **Figure 3:** Representation probing results for ERM and IRM features.
 </div>
 
-The digit probe on IRM features ($74.3\%$) tracks IRM's actual test accuracy closely, consistent with a representation that retains mostly causal information. ERM's digit probe is higher ($85.6\%$) because its representation packs in everything, color and shape alike, it simply relies on the wrong one at test time. Color remains linearly decodable from both representations at $100\%$, so IRM's gain in robustness comes from how the head uses the representation, not from erasing color from it.
+Both representations are almost equally decodable: color sits at $100\%$ for both, and digit identity is nearly identical too ($91.6\%$ vs $91.3\%$). Standardizing features before probing doesn't change the picture ($92.1\%$ vs $93.8\%$). The encoder isn't discarding anything under either objective, both keep the full color signal and a comparable amount of digit signal. IRM's entire generalization gain is coming from how the classifier head combines that shared representation, not from what information the representation contains.
 
 ### 5.3 Training Dynamics
 
@@ -108,6 +108,7 @@ The phase transition at step $190$ is the most informative part of this experime
 
 ## 6. Discussion
 
+- **Where the invariance lives:** color and digit are decodable at nearly the same rate from both models' representations, so IRM isn't producing a representation that has forgotten the spurious feature. IRM-v1 is a predictor-alignment method, not an information bottleneck, its advantage comes entirely from how the head reads a shared representation, not from filtering what's in it.
 - **IRM stability:** IRM-v1 was stable here (test std $= 0.1\%$), which isn't guaranteed in general. [Gulrajani & Lopez-Paz (2021)](https://arxiv.org/abs/2007.01434) show IRM can be highly sensitive to hyperparameters on harder benchmarks like DomainBed; the simplicity of Colored MNIST likely explains the stability observed here.
 - **Gap to the noise ceiling:** IRM reaches $66.2\%$ against the $75\%$ ceiling set by label noise. The gap likely comes from the interaction between the noise and IRM's optimization dynamics, longer training, LR tuning, or a stronger penalty weight are the obvious next things to try.
 - **Scope:** These results are limited to Colored MNIST with a single MLP architecture and default hyperparameters. The conclusions on OOD generalization and representation entanglement are consistent with the original IRM paper, though evaluating on harder, higher-dimensional benchmarks such as DomainBed is also a plausible extension.

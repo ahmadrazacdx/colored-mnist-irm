@@ -88,16 +88,16 @@ def plot_accuracy(erm_m, erm_s, irm_m, irm_s):
 
 def plot_probes(means, stds):
     """Color vs Digit probe bar chart."""
-    labels = ['Color probe\n(spurious)', 'Digit probe\n(causal)']
+    labels = ['Color probe\n(spurious)', 'Digit probe\n(unscaled)', 'Digit probe\n(scaled)']
     x = np.arange(len(labels))
-    w = 0.32
+    w = 0.28
 
-    erm_vals = [means['erm_color'], means['erm_digit']]
-    irm_vals = [means['irm_color'], means['irm_digit']]
-    erm_err = [stds['erm_color'], stds['erm_digit']]
-    irm_err = [stds['irm_color'], stds['irm_digit']]
+    erm_vals = [means['erm_color'], means['erm_digit'], means['erm_digit_std']]
+    irm_vals = [means['irm_color'], means['irm_digit'], means['irm_digit_std']]
+    erm_err = [stds['erm_color'], stds['erm_digit'], stds['erm_digit_std']]
+    irm_err = [stds['irm_color'], stds['irm_digit'], stds['irm_digit_std']]
 
-    fig, ax = plt.subplots(figsize=(6, 4.5))
+    fig, ax = plt.subplots(figsize=(7.5, 4.5))
     ax.bar(x - w/2, erm_vals, w, yerr=erm_err, label='ERM repr.', color=ERM_COLOR,
            capsize=3, error_kw={'linewidth': 1.2})
     ax.bar(x + w/2, irm_vals, w, yerr=irm_err, label='IRM repr.', color=IRM_COLOR,
@@ -108,10 +108,10 @@ def plot_probes(means, stds):
     ax.set_title('Representation probing')
     ax.set_xticks(x)
     ax.set_xticklabels(labels)
-    ax.set_ylim(0, 1.12)
-    ax.legend(loc='upper right', framealpha=0.9)
+    ax.set_ylim(0, 1.05)
+    ax.legend(loc='upper left', bbox_to_anchor=(1.01, 1), framealpha=0.9, borderaxespad=0)
 
-    for bars, vals in [(ax.patches[:2], erm_vals), (ax.patches[2:], irm_vals)]:
+    for bars, vals in [(ax.patches[:3], erm_vals), (ax.patches[3:], irm_vals)]:
         for bar, val in zip(bars, vals):
             y = bar.get_height()
             if y > 0.85:
