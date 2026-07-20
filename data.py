@@ -33,8 +33,8 @@ def make_envs(data_dir='./data', seed=0):
     envs = []
     for (x, y), flip_p in zip(splits, flip_probs):
         n = len(x)
-        y_bin = (y >= 5).float() # binarize labels
-        y_bin = (y_bin - (torch.rand(n) < 0.25).float()).abs() # flip labels
+        y_clean = (y >= 5).float() # clean labels
+        y_bin = (y_clean - (torch.rand(n) < 0.25).float()).abs() # flip labels
         colors = (y_bin - (torch.rand(n) < flip_p).float()).abs() # assign colors
         x_2ch = torch.stack([x, x], dim=1) # (N, 2, 14, 14)
         x_2ch[torch.arange(n), (1 - colors).long()] = 0
@@ -42,6 +42,7 @@ def make_envs(data_dir='./data', seed=0):
         envs.append({
             'images': (x_2ch / 255.).reshape(n, -1),
             'labels': y_bin[:, None],
+            'clean_labels': y_clean[:, None],
             'colors': colors[:, None],
         })
 

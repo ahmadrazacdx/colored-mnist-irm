@@ -5,6 +5,7 @@ import numpy as np
 import torch
 import matplotlib.pyplot as plt
 from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import StandardScaler
 
 from data import set_seeds, make_envs
 from model import MLP
@@ -31,17 +32,22 @@ IRM_COLOR = '#0072B2'
 
 def extract_features(model, envs, device):
     model.eval()
-    feats, labels, colors = [], [], []
+    feats, labels, clean_labels, colors = [], [], [], []
     with torch.no_grad():
         for env in envs:
             feats.append(model.features(env['images'].to(device)).cpu().numpy())
             labels.append(env['labels'].cpu().numpy())
+            clean_labels.append(env.get('clean_labels', env['labels']).cpu().numpy())
             colors.append(env['colors'].cpu().numpy())
-    return np.concatenate(feats), np.concatenate(labels).ravel(), np.concatenate(colors).ravel()
+    return np.concatenate(feats), np.concatenate(labels).ravel(), np.concatenate(clean_labels).ravel(), np.concatenate(colors).ravel()
 
 
-def train_probe(X_tr, y_tr, X_te, y_te):
-    return LogisticRegression(max_iter=1000, C=1.0).fit(X_tr, y_tr).score(X_te, y_te)
+def train_probe(X_tr, y_tr, X_te, y_te, standardize=False):
+    if standardize:
+        scaler = StandardScaler()
+        X_tr = scaler.fit_transform(X_tr)
+        X_te = scaler.transform(X_te)
+    return LogisticRegression(max_iter=1000).fit(X_tr, y_tr).score(X_te, y_te)
 
 def plot_accuracy(erm_m, erm_s, irm_m, irm_s):
     labels = ['Env1\n(90% corr)', 'Env2\n(80% corr)', 'Test\n(10% corr)']
@@ -154,50 +160,6 @@ def plot_dynamics(erm_hist, irm_hist, anneal_step=190):
     print('Saved figures/training_dynamics.png')
 
 
-def plot_pca(erm_model, irm_model, envs, device):
-    results = {}
-    for model, name in [(erm_model, 'ERM'), (irm_model, 'IRM')]:
-        feats, labels, colors = extract_features(model, envs, device)
-        w_c = LogisticRegression(max_iter=1000, C=1.0).fit(feats, colors).coef_[0]
-        w_d = LogisticRegression(max_iter=1000, C=1.0).fit(feats, labels).coef_[0]
-        w_c = w_c / np.linalg.norm(w_c)
-        w_d = w_d / np.linalg.norm(w_d)
-
-        head_w = model.head.weight.data[0].cpu().numpy()
-        head_w = head_w / np.linalg.norm(head_w)
-
-        results[name] = (abs(np.dot(head_w, w_c)), abs(np.dot(head_w, w_d)))
-        print(f'  {name} head alignment:  '
-              f'|cos(head, color)| = {results[name][0]:.3f}   '
-              f'|cos(head, digit)| = {results[name][1]:.3f}')
-
-    fig, ax = plt.subplots(figsize=(5, 4))
-    x = np.arange(2)
-    w = 0.30
-    color_vals = [results['ERM'][0], results['IRM'][0]]
-    digit_vals = [results['ERM'][1], results['IRM'][1]]
-
-    ax.bar(x - w/2, color_vals, w, label='Color direction', color='#c0392b', alpha=0.85)
-    ax.bar(x + w/2, digit_vals, w, label='Digit direction', color='#2980b9', alpha=0.85)
-    ax.set_xticks(x)
-    ax.set_xticklabels(['ERM', 'IRM'], fontsize=12)
-    ax.set_ylabel('|cos(head, probe direction)|', fontsize=10)
-    ax.set_ylim(0, 1.0)
-    ax.set_title('Classifier head alignment', fontsize=13)
-    ax.legend(fontsize=10, framealpha=0.9)
-
-    for container in ax.containers:
-        for bar in container:
-            h = bar.get_height()
-            ax.text(bar.get_x() + bar.get_width()/2, h + 0.02,
-                    f'{h:.2f}', ha='center', va='bottom', fontsize=10, fontweight='bold')
-
-    plt.tight_layout()
-    plt.savefig('figures/pca_representations.png', dpi=150, bbox_inches='tight')
-    plt.close()
-    print('Saved figures/pca_representations.png')
-
-
 if __name__ == '__main__':
     os.makedirs('figures', exist_ok=True)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -205,7 +167,7 @@ if __name__ == '__main__':
 
     all_erm_accs, all_irm_accs = [], []
     erm_color_p, erm_digit_p, irm_color_p, irm_digit_p = [], [], [], []
-
+    erm_digit_std_p, irm_digit_std_p = [], []
 
     for seed in SEEDS:
         set_seeds(seed)
@@ -218,34 +180,41 @@ if __name__ == '__main__':
         all_erm_accs.append([accuracy(erm_model, e['images'].to(device), e['labels'].to(device)) for e in envs])
         all_irm_accs.append([accuracy(irm_model, e['images'].to(device), e['labels'].to(device)) for e in envs])
 
-        erm_feats, labels, colors = extract_features(erm_model, envs, device)
-        irm_feats, _, _ = extract_features(irm_model, envs, device)
+        erm_feats, labels, clean_labels, colors = extract_features(erm_model, envs, device)
+        irm_feats, _, _, _ = extract_features(irm_model, envs, device)
 
         idx = np.random.permutation(len(labels))
         s = int(len(labels) * 0.8)
         tr, te = idx[:s], idx[s:]
         erm_color_p.append(train_probe(erm_feats[tr], colors[tr], erm_feats[te], colors[te]))
-        erm_digit_p.append(train_probe(erm_feats[tr], labels[tr], erm_feats[te], labels[te]))
+        erm_digit_p.append(train_probe(erm_feats[tr], clean_labels[tr], erm_feats[te], clean_labels[te]))
         irm_color_p.append(train_probe(irm_feats[tr], colors[tr], irm_feats[te], colors[te]))
-        irm_digit_p.append(train_probe(irm_feats[tr], labels[tr], irm_feats[te], labels[te]))
+        irm_digit_p.append(train_probe(irm_feats[tr], clean_labels[tr], irm_feats[te], clean_labels[te]))
+        
+        erm_digit_std_p.append(train_probe(erm_feats[tr], clean_labels[tr], erm_feats[te], clean_labels[te], standardize=True))
+        irm_digit_std_p.append(train_probe(irm_feats[tr], clean_labels[tr], irm_feats[te], clean_labels[te], standardize=True))
+
+
 
     erm_m, erm_s = np.mean(all_erm_accs, 0), np.std(all_erm_accs, 0)
     irm_m, irm_s = np.mean(all_irm_accs, 0), np.std(all_irm_accs, 0)
 
     probe_means = dict(erm_color=np.mean(erm_color_p), erm_digit=np.mean(erm_digit_p),
-                       irm_color=np.mean(irm_color_p), irm_digit=np.mean(irm_digit_p))
+                       irm_color=np.mean(irm_color_p), irm_digit=np.mean(irm_digit_p),
+                       erm_digit_std=np.mean(erm_digit_std_p), irm_digit_std=np.mean(irm_digit_std_p))
     probe_stds = dict(erm_color=np.std(erm_color_p), erm_digit=np.std(erm_digit_p),
-                      irm_color=np.std(irm_color_p), irm_digit=np.std(irm_digit_p))
+                      irm_color=np.std(irm_color_p), irm_digit=np.std(irm_digit_p),
+                      erm_digit_std=np.std(erm_digit_std_p), irm_digit_std=np.std(irm_digit_std_p))
 
-    print('\n' + '='*60)
-    print(f"{'Probe target':<22} | {'ERM features':<16} | {'IRM features':<16}")
-    print('-'*60)
+    print('\n' + '='*76)
+    print(f"{'Probe target':<36} | {'ERM features':<16} | {'IRM features':<16}")
+    print('-'*76)
     for name, ek, ik in [('Color (spurious)', 'erm_color', 'irm_color'),
-                          ('Digit (causal)',   'erm_digit', 'irm_digit')]:
-        print(f'{name:<22} | {probe_means[ek]:.1%} ({probe_stds[ek]:.1%})'
+                         ('Clean Digit (unscaled)',   'erm_digit', 'irm_digit'),
+                         ('Clean Digit (scaled)',   'erm_digit_std', 'irm_digit_std')]:
+        print(f'{name:<36} | {probe_means[ek]:.1%} ({probe_stds[ek]:.1%})'
               f'       | {probe_means[ik]:.1%} ({probe_stds[ik]:.1%})')
-    print('='*60)
-
+    print('='*76)
     plot_accuracy(erm_m, erm_s, irm_m, irm_s)
     plot_probes(probe_means, probe_stds)
 
@@ -255,10 +224,3 @@ if __name__ == '__main__':
         plot_dynamics(np.load(erm_hist_path), np.load(irm_hist_path))
     else:
         print('Skipping dynamics plot (re-run train.py to generate history files)')
-
-    set_seeds(0)
-    envs_0 = make_envs(seed=0)
-    erm_0, irm_0 = MLP().to(device), MLP().to(device)
-    erm_0.load_state_dict(torch.load('erm_model_seed0.pt', map_location=device))
-    irm_0.load_state_dict(torch.load('irm_model_seed0.pt', map_location=device))
-    plot_pca(erm_0, irm_0, envs_0, device)
