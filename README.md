@@ -115,21 +115,20 @@ The phase transition at step $190$ is the most informative part of this experime
 
 ## 7. Usage
 
-### 7.1 Installation
-
 ```bash
+# clone repo & install deps
 git clone https://github.com/ahmadrazacdx/colored-mnist-irm.git
 cd colored-mnist-irm
 pip install -r requirements.txt
-```
-
-### 7.2 Dataset Generation
-
-```bash
+# get data ready
 python data.py
+# Train using Empirical Risk Minimization (ERM)
+python train.py --mode erm
+# Train using Invariant Risk Minimization (IRM)
+python train.py --mode irm
+# run probes on the trained models
+python probe.py
 ```
-
-### 7.3 Training
 
 `train.py` trains either method and accepts the following flags:
 
@@ -144,22 +143,6 @@ python data.py
 | `--anneal_steps` | `optional` | Warmup steps before applying the IRM penalty. | `190` |
 
 </div>
-
-```bash
-# Train using Empirical Risk Minimization (ERM)
-python train.py --mode erm
-
-# Train using Invariant Risk Minimization (IRM)
-python train.py --mode irm
-```
-
-### 7.4 Probing
-
-Extracts frozen encoder features from the trained models and fits logistic regression probes to classify the causal or spurious feature.
-
-```bash
-python probe.py
-```
 
 ## 8. References
 
