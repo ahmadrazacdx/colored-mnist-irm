@@ -140,7 +140,7 @@ Our linear probing analysis in Section 5.2 showed that both ERM and IRM encoders
 </div>
 
 1. **Head Re-Alignment (Predictor Alignment):** IRM does not erase color from the encoder; instead, it re-aligns the linear classifier head $W_{\text{head}}$. Measuring alignment with probe directions confirms that ERM's head aligns heavily with color, whereas IRM's head shifts alignment directly to the causal shape probe ($S_{\text{causal}}$).
-2. **Subspace Compression (Rank Pruning):** To facilitate head alignment, the encoder flattens the spurious color dimensions. SVD singular value decay ($\exp(-\sum p_i \log p_i)$) confirms IRM compresses representation rank from $15.5$ down to $4.5$, leaving only a low-dimensional shape manifold.
+2. **Subspace Compression (Rank Pruning):** To facilitate head alignment, the encoder flattens the spurious color dimensions. SVD singular value decay $(\exp(-\sum p_i \log p_i))$ confirms IRM compresses representation rank from $15.5$ down to $4.5$, leaving only a low-dimensional shape manifold.
 3. **Causal Guarantee ($\text{do}$-interventions):** Evaluating the combined effect of head alignment and rank compression under explicit color-swap interventions $\text{do}(\text{Color} = 1 - \text{Color})$ (Kusner et al., 2017; Veitch et al., 2021) shows ERM's predictions flip $72.3\%$ of the time ($\text{CES} = 8.18$), whereas IRM reduces flips to $13.9\%$ ($\text{CES} = 0.76$, a $>10\times$ reduction).
 
 ## 6. Discussion
